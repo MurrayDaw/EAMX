@@ -1,0 +1,80 @@
+#
+# read in EAMX.eamalloy for binary and 
+# calculate FCC cohesive energy & lattice constant for both types
+#
+
+# set variables
+variable a0 equal 3.79 # guess for a0
+variable Nbox equal 3     # size of box in lattice constants 
+
+# ---------- Initialize Simulation --------------------- 
+clear 
+units metal 
+dimension 3 
+boundary p p p 
+atom_style atomic 
+
+# ---------- Create Structure -------------------
+lattice fcc ${a0}
+variable Lside equal ${Nbox}*${a0}
+region whole block 0 ${Lside} 0 ${Lside} 0 ${Lside} units box
+create_box 2 whole    
+create_atoms 1 region whole
+
+# ---------- Define Interatomic Potential --------------------- 
+pair_style eam/alloy
+pair_coeff * * EAMX.eamalloy A B
+
+neighbor 2.0 bin 
+neigh_modify delay 10 check yes 
+
+# ---- calculate lattice constant ----
+variable alat equal (vol^0.3333)/v_Nbox
+
+compute        peratom all pe/atom
+compute        per all reduce ave c_peratom
+variable       vper equal c_per
+
+# ---------- Minimize fully (including volume) --------
+thermo 1
+thermo_style custom step pe lx ly lz vol press c_per
+fix fboxrelax all box/relax iso 0 vmax 0.001
+#displace_atoms all random 0.01 0.01 0.01 123456
+min_style cg 
+minimize 1e-9 1e-9 50000 50000
+variable amin equal ${alat}
+
+# ----------- compute perfect pote and lattice constant  ------------
+
+variable pote equal pe
+variable volume equal vol
+run 0
+variable pote0 equal ${pote}
+variable vol0 equal ${volume}
+variable esub equal ${vper}
+variable volper equal ${vol0}/atoms
+
+print " ************* Type A ************* " 
+print "   esub = ${esub} " 
+print "   alat = ${amin} "  
+print " ******************************************* " 
+
+# change all to type 2
+set group all type 2
+
+#displace_atoms all random 0.01 0.01 0.01 654321
+minimize 1e-9 1e-9 50000 50000
+variable amin equal ${alat}
+variable pote equal pe
+variable volume equal vol
+run 0
+variable pote0 equal ${pote}
+variable vol0 equal ${volume}
+variable esub equal ${vper}
+variable volper equal ${vol0}/atoms
+
+print " ************* Type B ************* " 
+print "   esub = ${esub} " 
+print "   alat = ${amin} "  
+print " ******************************************* " 
+
